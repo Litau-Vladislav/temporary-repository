@@ -405,3 +405,73 @@ plt.xticks(range(len(importances)), [features[i] for i in indices], rotation=45)
 plt.title('Важность признаков')
 plt.tight_layout()
 plt.show()
+
+
+
+
+
+Подбор всегда делается только на обучающих данных, но с использованием валидации — иначе ты просто переобучишься на тестовую выборку. Лучший способ — использовать кросс-валидацию внутри обучения, что реализовано в GridSearchCV и RandomizedSearchCV из sklearn. Эти инструменты автоматически делят train на фолды, перебирают параметры и выбирают комбинацию с лучшим средним результатом по фолдам.
+
+Важно: если в твоём пайплайне есть предобработка (например, масштабирование), её тоже нужно включать в поиск — иначе при ручном масштабировании до GridSearchCV может произойти утечка данных. Для этого используется Pipeline.
+
+Если времени мало или параметров много, лучше использовать RandomizedSearchCV — он пробует случайные комбинации из заданного распределения и часто находит хорошее решение быстрее, чем полный перебор.
+
+
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+
+#### Определяем сетку гиперпараметров
+param_grid = {
+    'n_estimators': [50, 100, 200],
+    'max_depth': [3, 5, 7, None],
+    'min_samples_split': [2, 5, 10]
+}
+
+#### Создаём модель
+model = RandomForestClassifier(random_state=42)
+
+#### Запускаем поиск
+grid_search = GridSearchCV(
+    estimator=model,
+    param_grid=param_grid,
+    cv=5,                     # 5-фолдная кросс-валидация
+    scoring='f1',             # метрика для оптимизации
+    n_jobs=-1,                # использовать все ядра
+    verbose=1                 # показывать прогресс
+)
+
+#### Обучаем (на X_train, y_train!)
+grid_search.fit(X_train, y_train)
+
+#### Лучшая модель и параметры
+print("Лучшие параметры:", grid_search.best_params_)
+print("Лучший скор (F1):", grid_search.best_score_)
+
+#### Используем лучшую модель для предсказания
+best_model = grid_search.best_estimator_
+y_pred = best_model.predict(X_test)
+
+
+
+
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import randint, uniform
+
+param_distributions = {
+    'n_estimators': randint(50, 300),      # случайное целое от 50 до 300
+    'max_depth': [3, 5, 7, 10, None],
+    'min_samples_split': randint(2, 20)
+}
+
+random_search = RandomizedSearchCV(
+    estimator=RandomForestClassifier(random_state=42),
+    param_distributions=param_distributions,
+    n_iter=20,                # попробовать 20 случайных комбинаций
+    cv=5,
+    scoring='f1',
+    n_jobs=-1,
+    random_state=42
+)
+
+random_search.fit(X_train, y_train)
+print("Лучшие параметры:", random_search.best_params_)
